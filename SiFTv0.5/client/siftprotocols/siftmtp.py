@@ -11,10 +11,11 @@ class SiFT_MTP:
 	def __init__(self, peer_socket):
 
 		self.DEBUG = True
+		self.sqn = 1
 		# --------- CONSTANTS ------------
-		self.version_major = 0
-		self.version_minor = 5
-		self.msg_hdr_ver = b'\x00\x05'
+		self.version_major = 1
+		self.version_minor = 0
+		self.msg_hdr_ver = b'\x10\x00'
 		self.size_msg_hdr = 6
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2

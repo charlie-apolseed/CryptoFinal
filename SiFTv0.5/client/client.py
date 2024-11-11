@@ -200,7 +200,7 @@ if __name__ == '__main__':
 
     mtp = SiFT_MTP(sckt)
     loginp = SiFT_LOGIN(mtp)
-
+          
     print()
     username = input('   Username: ')
     password = getpass.getpass('   Password: ')
