@@ -6,6 +6,7 @@ from Crypto.Hash import SHA256
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
+import rsa_generation  
 
 
 class SiFT_LOGIN_Error(Exception):
@@ -173,10 +174,15 @@ class SiFT_LOGIN:
         
         #TODO TODO TODO Encrypt the tk using RSA-OAEP with the RSA public key of the server. 
         # For this, we need the public key of the server which we do not have yet.
+        rsa_generation.generate_keypair()
+        
+        encryptedTempKey = rsa_generation.encrypt(tk)
+        msg_payload = aesGeneratedMessage + encryptedTempKey
+
 
         # trying to send login request
         try:
-            self.mtp.send_msg(self.mtp.type_login_req, msg_payload)
+            self.mtp.send_login(msg_payload)
         except SiFT_MTP_Error as e:
             raise SiFT_LOGIN_Error('Unable to send login request --> ' + e.err_msg)
 

@@ -138,3 +138,9 @@ class SiFT_MTP:
 			raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
 
 
+	def send_login(self, msg_payload):
+		try:
+			self.send_bytes(msg_payload)
+		except SiFT_MTP_Error as e:
+			raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
+
