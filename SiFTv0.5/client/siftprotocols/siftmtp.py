@@ -3,11 +3,10 @@
 import os
 import socket
 import time
-import rsa_generation
 from Crypto.Cipher import AES
+from . import rsa_generation
 
 class SiFT_MTP_Error(Exception):
-
     def __init__(self, err_msg):
         self.err_msg = err_msg
 
@@ -130,19 +129,26 @@ class SiFT_MTP:
 
 			rnd = os.urandom(6)
 			#Calculate length of header
-			msg_len = self.msg_hdr_size + len(msg_payload) + MSG_MAC_LEN + MSG_ENC_TK_LEN
-			msg_len_hex = msg_len.to_bytes(2, byteorder='big').hex()
+			msg_len = self.size_msg_hdr + len(msg_payload) + MSG_MAC_LEN + MSG_ENC_TK_LEN
+			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
    
 			#Construct the header
 			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+			#DEBUG
+			if self.DEBUG:
+				print("Header: ")
+				print(msgHeader.hex())
+				print("Unencrypted message: ")
+				print(msg_payload)
+			
+			#DEBUG
 
 			#Encrypt the payload in AES-GCM
 			tk = os.urandom(32) 	
-			nonce = self.mtp.sqn.to_bytes(2, byteorder='big') + rnd
-			cipher = AES.new(tk, nonce, AES.MODE_GCM, 12)
+			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
 			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) #TODO Do we need to send the tag as well?
-
 
 			#Encrypt the tk in RSA 
 			rsa_generation.generate_keypair()
@@ -154,7 +160,7 @@ class SiFT_MTP:
 				complete_msg_size = len(completeMessage)
 				print('MTP login message to send (' + str(complete_msg_size) + '):')
 				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
-				print('BDY (' + str(len(completeMessage)) + '): ')
+				print('MSG (' + str(len(completeMessage)) + '): ')
 				print(completeMessage.hex())
 				print('------------------------------------------')
 			#DEBUG

@@ -1,5 +1,6 @@
 # rsa_generation.py
-import sys, getpass
+import os
+import sys
 from base64 import b64encode, b64decode
 from Crypto.Cipher import AES, PKCS1_OAEP
 from Crypto.Signature import PKCS1_PSS
@@ -10,8 +11,8 @@ from Crypto import Random
 
 # Configuration
 operation = 'enc'  # default
-pubkeyfile = '/client/pubkey.pem'
-privkeyfile = '/server/keypair.pem'
+pubkeyfile = './siftprotocols/pubkey.pem'
+privkeyfile = '../server/siftprotocols/privkey.pem'
 sign = False
 
 # Utility functions (same as your code)
@@ -29,16 +30,14 @@ def load_publickey(pubkeyfile):
         sys.exit(1)
 
 def save_keypair(keypair, privkeyfile):
-    passphrase = getpass.getpass('Enter a passphrase to protect the saved private key: ')
     with open(privkeyfile, "wb") as f:
-        f.write(keypair.export_key(format="PEM", passphrase=passphrase))
+        f.write(keypair.export_key(format="PEM"))
 
 def load_keypair(privkeyfile):
-    passphrase = getpass.getpass('Enter a passphrase to decode the saved private key: ')
     with open(privkeyfile, 'rb') as f:
         keypairstr = f.read()
     try:
-        return RSA.import_key(keypairstr, passphrase=passphrase)
+        return RSA.import_key(keypairstr)
     except ValueError:
         print('Error: Cannot import private key from file ' + privkeyfile)
         sys.exit(1)
@@ -61,23 +60,9 @@ def encrypt(inputText):
     pubkey = load_publickey(pubkeyfile)
     RSAcipher = PKCS1_OAEP.new(pubkey)
 
-  
-
-    padded_plaintext = Padding.pad(inputText, AES.block_size, style="pkcs7")
-    symkey = Random.get_random_bytes(32)
-    AEScipher = AES.new(symkey, AES.MODE_CBC)
-    iv = AEScipher.iv
-    ciphertext = AEScipher.encrypt(padded_plaintext)
-    encsymkey = RSAcipher.encrypt(symkey)
-
-    # Prepare components to be returned
-    encrypted_data = 'encrypted_aes_key'+ newline(b64encode(encsymkey)) 
-    +'iv' + newline(b64encode(iv)) 
-    +'ciphertext' + newline(b64encode(ciphertext))
+    encryptedData = RSAcipher.encrypt(inputText)
     
-     
-    print('RSA encryption complete.')
-    return encrypted_data
+    return encryptedData
 
 # Decryption
 def decrypt(inputfile, outputfile):

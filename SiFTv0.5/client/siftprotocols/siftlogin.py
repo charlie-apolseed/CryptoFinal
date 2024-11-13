@@ -6,7 +6,6 @@ from Crypto.Hash import SHA256
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
-import rsa_generation  
 
 
 class SiFT_LOGIN_Error(Exception):
@@ -34,7 +33,7 @@ class SiFT_LOGIN:
     # builds a login request from a dictionary
     def build_login_req(self, login_req_struct):
         login_req_str = login_req_struct['timestamp']
-        login_req_str += self.delimter + login_req_struct['username']
+        login_req_str += self.delimiter + login_req_struct['username']
         login_req_str += self.delimiter + login_req_struct['password'] 
         login_req_str += self.delimiter + login_req_struct['client_random'] 
         return login_req_str.encode(self.coding)
@@ -159,7 +158,7 @@ class SiFT_LOGIN:
 
         # trying to send login request
         try:
-            self.mtp.send_login(msg_payload)
+            self.mtp.send_msg(self.mtp.type_login_req, msg_payload)
         except SiFT_MTP_Error as e:
             raise SiFT_LOGIN_Error('Unable to send login request --> ' + e.err_msg)
 
