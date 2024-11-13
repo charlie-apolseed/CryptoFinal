@@ -156,29 +156,6 @@ class SiFT_LOGIN:
             print(msg_payload[:max(512, len(msg_payload))].decode('utf-8'))
             print('------------------------------------------')
         # DEBUG 
-        
-        #Generate random numbers for mtp login message
-        rnd = os.urandom(6)
-        tk = os.urandom(32) 
-        rsv = b'\x00\x00'
-        
-        
-        header = self.mtp.msg_hdr_ver + self.mtp.type_login_req + len(msg_payload) + rnd + rsv
-        
-        nonce = self.mtp.sqn.to_bytes(2, byteorder='big') + rnd
-        cipher = AES.new(tk, nonce, AES.MODE_GCM, 12)
-        cipher.update(header)
-        ciphertext, tag = cipher.encrypt_and_digest(msg_payload)
-        
-        aesGeneratedMessage = header + ciphertext + tag
-        
-        #TODO TODO TODO Encrypt the tk using RSA-OAEP with the RSA public key of the server. 
-        # For this, we need the public key of the server which we do not have yet.
-        rsa_generation.generate_keypair()
-        
-        encryptedTempKey = rsa_generation.encrypt(tk)
-        msg_payload = aesGeneratedMessage + encryptedTempKey
-
 
         # trying to send login request
         try:
