@@ -6,7 +6,6 @@ from Crypto.Hash import SHA256
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
-import rsa_generation  
 
 
 class SiFT_LOGIN_Error(Exception):
@@ -34,7 +33,7 @@ class SiFT_LOGIN:
     # builds a login request from a dictionary
     def build_login_req(self, login_req_struct):
         login_req_str = login_req_struct['timestamp']
-        login_req_str += self.delimter + login_req_struct['username']
+        login_req_str += self.delimiter + login_req_struct['username']
         login_req_str += self.delimiter + login_req_struct['password'] 
         login_req_str += self.delimiter + login_req_struct['client_random'] 
         return login_req_str.encode(self.coding)
@@ -156,33 +155,10 @@ class SiFT_LOGIN:
             print(msg_payload[:max(512, len(msg_payload))].decode('utf-8'))
             print('------------------------------------------')
         # DEBUG 
-        
-        #Generate random numbers for mtp login message
-        rnd = os.urandom(6)
-        tk = os.urandom(32) 
-        rsv = b'\x00\x00'
-        
-        
-        header = self.mtp.msg_hdr_ver + self.mtp.type_login_req + len(msg_payload) + rnd + rsv
-        
-        nonce = self.mtp.sqn.to_bytes(2, byteorder='big') + rnd
-        cipher = AES.new(tk, nonce, AES.MODE_GCM, 12)
-        cipher.update(header)
-        ciphertext, tag = cipher.encrypt_and_digest(msg_payload)
-        
-        aesGeneratedMessage = header + ciphertext + tag
-        
-        #TODO TODO TODO Encrypt the tk using RSA-OAEP with the RSA public key of the server. 
-        # For this, we need the public key of the server which we do not have yet.
-        rsa_generation.generate_keypair()
-        
-        encryptedTempKey = rsa_generation.encrypt(tk)
-        msg_payload = aesGeneratedMessage + encryptedTempKey
-
 
         # trying to send login request
         try:
-            self.mtp.send_login(msg_payload)
+            self.mtp.send_msg(self.mtp.type_login_req, msg_payload)
         except SiFT_MTP_Error as e:
             raise SiFT_LOGIN_Error('Unable to send login request --> ' + e.err_msg)
 
