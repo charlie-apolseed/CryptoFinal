@@ -94,6 +94,14 @@ class SiFT_MTP:
 		except SiFT_MTP_Error as e:
 			raise SiFT_MTP_Error('Unable to receive message body --> ' + e.err_msg)
 
+
+		try:
+			msg_enc_tk = msg_body[-256:]
+			msg_mac = msg_body[-268:-256]
+			msg_enc_payload = msg_body[:-268]
+		except SiFT_MTP_Error as e:
+			raise SiFT_MTP_Error('Unable to break down message body --> ' + e.err_msg)
+
 		# DEBUG 
 		if self.DEBUG:
 			print('MTP message received (' + str(msg_len) + '):')
@@ -108,12 +116,11 @@ class SiFT_MTP:
 
 		if (parsed_msg_hdr['typ'] == self.type_login_req) :
 			recievedTime = time.time_ns()
-			encTK = msg_body[-256:]
-			tk = rsa_generation.decrypt(encTK)
+			tk = rsa_generation.decrypt(msg_enc_tk)
 			#DEBUG 
 			print(tk)
 			#DEBUG 
-			#TODO decrypt the message
+			#TODO verify MAC and decrypt payload
 
 		return parsed_msg_hdr['typ'], msg_body
 
