@@ -15,6 +15,7 @@ class SiFT_MTP:
 
 		self.DEBUG = True
 		self.sqn = 1
+		self.transfer_key = ""
 		# --------- CONSTANTS ------------
 		self.version_major = 1
 		self.version_minor = 0
@@ -66,12 +67,12 @@ class SiFT_MTP:
 				raise SiFT_MTP_Error('Connection with peer is broken')
 			bytes_received += chunk
 			bytes_count += len(chunk)
+		print("Client- Bytes recieved: "+ str(bytes_count))
 		return bytes_received
 
 
 	# receives and parses message, returns msg_type and msg_payload
 	def receive_msg(self):
-
 		try:
 			msg_hdr = self.receive_bytes(self.size_msg_hdr)
 		except SiFT_MTP_Error as e:
@@ -89,7 +90,7 @@ class SiFT_MTP:
 			raise SiFT_MTP_Error('Unknown message type found in message header')
 
 		msg_len = int.from_bytes(parsed_msg_hdr['len'], byteorder='big')
-
+  
 		try:
 			msg_body = self.receive_bytes(msg_len - self.size_msg_hdr)
 		except SiFT_MTP_Error as e:
@@ -107,7 +108,28 @@ class SiFT_MTP:
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body reveived')
 
-		return parsed_msg_hdr['typ'], msg_body
+		if (parsed_msg_hdr['typ'] == self.type_login_res) :
+			try:
+				msg_mac = msg_body[-12:]
+				msg_enc_payload = msg_body[:-12]
+			except SiFT_MTP_Error as e:
+				raise SiFT_MTP_Error('Unable to break down login response body --> ' + e.err_msg)
+			nonce = msg_hdr[6:14]
+			#DEBUG 
+			print("Decryption key: " + str(self.transfer_key))
+			print("Recieved Nonce: " + str(nonce))
+			#DEBUG 
+			
+			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msg_hdr)
+			try:
+				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
+			except e:
+				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
+
+			
+
+		return parsed_msg_hdr['typ'], decryptedPayload
 
 
 	# sends all bytes provided via the peer socket
@@ -145,18 +167,22 @@ class SiFT_MTP:
 
 			#Encrypt the payload in AES-GCM
 			tk = os.urandom(32) 	
+			self.transfer_key = tk
 			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
 			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
-			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) #TODO Do we need to send the tag as well?
+			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
 
 			#Encrypt the tk in RSA 
 			rsa_generation.generate_keypair()
 			encryptedTK = rsa_generation.encrypt(tk)
-			completeMessage = msgHeader + encrytptedPayload + encryptedTK
+			completeMessage = msgHeader + encrytptedPayload + tag + encryptedTK
+
 
    			#DEBUG
 			if self.DEBUG:
+				print("Sent TK: " + str(tk))
+				print("Nonce used: " + str(nonce))
 				complete_msg_size = len(completeMessage)
 				print('MTP login message to send (' + str(complete_msg_size) + '):')
 				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
@@ -169,7 +195,8 @@ class SiFT_MTP:
 				self.send_bytes(completeMessage)
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
-		
+	
+			
 
 		
 	

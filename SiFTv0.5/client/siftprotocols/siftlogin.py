@@ -159,6 +159,7 @@ class SiFT_LOGIN:
         # trying to send login request
         try:
             self.mtp.send_msg(self.mtp.type_login_req, msg_payload)
+            print("Client login message sent")
         except SiFT_MTP_Error as e:
             raise SiFT_LOGIN_Error('Unable to send login request --> ' + e.err_msg)
 
@@ -166,7 +167,7 @@ class SiFT_LOGIN:
         hash_fn = SHA256.new()
         hash_fn.update(msg_payload)
         request_hash = hash_fn.digest()
-
+  
         # trying to receive a login response
         try:
             msg_type, msg_payload = self.mtp.receive_msg()
