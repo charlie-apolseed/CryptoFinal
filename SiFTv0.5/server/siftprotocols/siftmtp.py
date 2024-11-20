@@ -117,12 +117,22 @@ class SiFT_MTP:
 		if (parsed_msg_hdr['typ'] == self.type_login_req) :
 			recievedTime = time.time_ns()
 			tk = rsa_generation.decrypt(msg_enc_tk)
+			nonce = msg_hdr[6:14]
 			#DEBUG 
-			print(tk)
+			print("Recieved TK: " + str(tk))
+			print("Recieved Nonce: " + str(nonce))
 			#DEBUG 
 			#TODO verify MAC and decrypt payload
+			
+			
+			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msg_hdr)
+			try:
+				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
+			except e:
+				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 
-		return parsed_msg_hdr['typ'], msg_body
+		return parsed_msg_hdr['typ'], decryptedPayload
 
 
 	# sends all bytes provided via the peer socket

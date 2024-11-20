@@ -158,8 +158,8 @@ class SiFT_MTP:
 
    			#DEBUG
 			if self.DEBUG:
-       			print("TK: ")
-				print(tk)
+				print("Sent TK: " + str(tk))
+				print("Nonce used: " + str(nonce))
 				complete_msg_size = len(completeMessage)
 				print('MTP login message to send (' + str(complete_msg_size) + '):')
 				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
