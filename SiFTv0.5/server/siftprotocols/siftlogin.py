@@ -1,7 +1,9 @@
 #python3
 
+import os
 import time
 from Crypto.Hash import SHA256
+from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
 
@@ -30,19 +32,24 @@ class SiFT_LOGIN:
 
     # builds a login request from a dictionary
     def build_login_req(self, login_req_struct):
-
-        login_req_str = login_req_struct['username']
+        login_req_str = login_req_struct['timestamp']
+        login_req_str += self.delimiter + login_req_struct['username']
         login_req_str += self.delimiter + login_req_struct['password'] 
+        login_req_str += self.delimiter + login_req_struct['client_random'] 
         return login_req_str.encode(self.coding)
 
 
+        
+        
     # parses a login request into a dictionary
     def parse_login_req(self, login_req):
 
         login_req_fields = login_req.decode(self.coding).split(self.delimiter)
         login_req_struct = {}
-        login_req_struct['username'] = login_req_fields[0]
-        login_req_struct['password'] = login_req_fields[1]
+        login_req_struct['timestamp'] = login_req_fields[0]
+        login_req_struct['username'] = login_req_fields[1]
+        login_req_struct['password'] = login_req_fields[2]
+        login_req_struct['client_random'] = login_req_fields[3]
         return login_req_struct
 
 
@@ -136,8 +143,10 @@ class SiFT_LOGIN:
 
         # building a login request
         login_req_struct = {}
+        login_req_struct['timestamp'] = str(time.time_ns())
         login_req_struct['username'] = username
         login_req_struct['password'] = password
+        login_req_struct['client_random'] = os.urandom(16).hex()  
         msg_payload = self.build_login_req(login_req_struct)
 
         # DEBUG 

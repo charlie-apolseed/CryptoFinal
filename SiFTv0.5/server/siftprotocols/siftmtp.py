@@ -1,9 +1,12 @@
 #python3
 
+import os
 import socket
+import time
+from Crypto.Cipher import AES
+from . import rsa_generation
 
 class SiFT_MTP_Error(Exception):
-
     def __init__(self, err_msg):
         self.err_msg = err_msg
 
@@ -11,14 +14,16 @@ class SiFT_MTP:
 	def __init__(self, peer_socket):
 
 		self.DEBUG = True
+		self.sqn = 1
 		# --------- CONSTANTS ------------
 		self.version_major = 1
 		self.version_minor = 0
 		self.msg_hdr_ver = b'\x10\x00'
-		self.size_msg_hdr = 6
+		self.size_msg_hdr = 16
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
 		self.size_msg_hdr_len = 2
+		self.rsv = b'\x00\x00'
 		self.type_login_req =    b'\x00\x00'
 		self.type_login_res =    b'\x00\x10'
 		self.type_command_req =  b'\x01\x00'
@@ -66,7 +71,6 @@ class SiFT_MTP:
 
 	# receives and parses message, returns msg_type and msg_payload
 	def receive_msg(self):
-
 		try:
 			msg_hdr = self.receive_bytes(self.size_msg_hdr)
 		except SiFT_MTP_Error as e:
@@ -84,7 +88,7 @@ class SiFT_MTP:
 			raise SiFT_MTP_Error('Unknown message type found in message header')
 
 		msg_len = int.from_bytes(parsed_msg_hdr['len'], byteorder='big')
-
+  
 		try:
 			msg_body = self.receive_bytes(msg_len - self.size_msg_hdr)
 		except SiFT_MTP_Error as e:
@@ -102,6 +106,15 @@ class SiFT_MTP:
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body reveived')
 
+		if (parsed_msg_hdr['typ'] == self.type_login_req) :
+			recievedTime = time.time_ns()
+			encTK = msg_body[-256:]
+			tk = rsa_generation.decrypt(encTK)
+			#DEBUG 
+			print(tk)
+			#DEBUG 
+			#TODO decrypt the message
+
 		return parsed_msg_hdr['typ'], msg_body
 
 
@@ -116,24 +129,62 @@ class SiFT_MTP:
 	# builds and sends message of a given type using the provided payload
 	def send_msg(self, msg_type, msg_payload):
 		
-		# build message
-		msg_size = self.size_msg_hdr + len(msg_payload)
-		msg_hdr_len = msg_size.to_bytes(self.size_msg_hdr_len, byteorder='big')
-		msg_hdr = self.msg_hdr_ver + msg_type + msg_hdr_len
 
-		# DEBUG 
-		if self.DEBUG:
-			print('MTP message to send (' + str(msg_size) + '):')
-			print('HDR (' + str(len(msg_hdr)) + '): ' + msg_hdr.hex())
-			print('BDY (' + str(len(msg_payload)) + '): ')
-			print(msg_payload.hex())
-			print('------------------------------------------')
-		# DEBUG 
+  
+		if (msg_type == self.type_login_req) :
+			MSG_MAC_LEN = 12  
+			MSG_ENC_TK_LEN = 256
 
-		# try to send
-		try:
-			self.send_bytes(msg_hdr + msg_payload)
-		except SiFT_MTP_Error as e:
-			raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
+			rnd = os.urandom(6)
+			#Calculate length of header
+			msg_len = self.size_msg_hdr + len(msg_payload) + MSG_MAC_LEN + MSG_ENC_TK_LEN
+			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
+   
+			#Construct the header
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+			#DEBUG
+			if self.DEBUG:
+				print("Header: ")
+				print(msgHeader.hex())
+				print("Unencrypted message: ")
+				print(msg_payload)
+			
+			#DEBUG
 
+			#Encrypt the payload in AES-GCM
+			tk = os.urandom(32) 	
+			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msgHeader)
+			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
 
+			#Encrypt the tk in RSA 
+			rsa_generation.generate_keypair()
+			encryptedTK = rsa_generation.encrypt(tk)
+			completeMessage = msgHeader + encrytptedPayload + tag + encryptedTK
+   
+   			#DEBUG
+			if self.DEBUG:
+				complete_msg_size = len(completeMessage)
+				print('MTP login message to send (' + str(complete_msg_size) + '):')
+				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
+				print('MSG (' + str(len(completeMessage)) + '): ')
+				print(completeMessage.hex())
+				print('------------------------------------------')
+			#DEBUG
+
+			try:
+				self.send_bytes(completeMessage)
+			except SiFT_MTP_Error as e:
+				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
+		
+
+		
+	
+		
+  		
+  
+		
+
+  
+	
