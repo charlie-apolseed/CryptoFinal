@@ -152,13 +152,16 @@ class SiFT_LOGIN:
             print('User ' + loginReq['username'] + ' logged in')
         # DEBUG 
         #Set derived key to HKDF key derivation...
-        h = HMAC.new(loginReq['client_random'].encode("utf-8") + login_res_struct['server_random'], digestmod=SHA256)
+        print("HMAC material")
+        client_random_bytes = bytes.fromhex(loginReq['client_random'])  # Decode from hex to bytes
+        hmac_material = client_random_bytes + login_res_struct['server_random']
+        print(hmac_material)
+        h = HMAC.new(hmac_material, digestmod=SHA256)
         h.update(request_hash)
         self.mtp.set_transfer_key(h.digest())
         print("Established session key:")
         print(h.hexdigest())
         
-
         return loginReq['username']
 
 

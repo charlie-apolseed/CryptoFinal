@@ -194,6 +194,9 @@ class SiFT_LOGIN:
         
         #Generating session key
         
+        print("HMAC material")
+        print(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'])
+        
         h = HMAC.new(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'], digestmod=SHA256)
         h.update(request_hash)
         self.mtp.set_transfer_key(h.digest())
