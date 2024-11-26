@@ -42,6 +42,8 @@ class SiFT_MTP:
 		# --------- STATE ------------
 		self.peer_socket = peer_socket
 
+	def set_transfer_key(self, key):
+		self.transfer_key = key
 
 	# parses a message header and returns a dictionary containing the header fields
 	def parse_msg_header(self, msg_hdr):

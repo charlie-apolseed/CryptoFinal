@@ -2,7 +2,7 @@
 
 import os
 import time
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, HMAC
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
@@ -65,6 +65,7 @@ class SiFT_LOGIN:
         login_res_fields = login_res.decode(self.coding).split(self.delimiter)
         login_res_struct = {}
         login_res_struct['request_hash'] = bytes.fromhex(login_res_fields[0])
+        login_res_struct['server_random'] = bytes.fromhex(login_res_fields[1])
         return login_res_struct
 
 
@@ -190,4 +191,16 @@ class SiFT_LOGIN:
         # checking request_hash receiveid in the login response
         if login_res_struct['request_hash'] != request_hash:
             raise SiFT_LOGIN_Error('Verification of login response failed')
+        
+        #Generating session key
+        
+        print("HMAC material")
+        print(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'])
+        
+        h = HMAC.new(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'], digestmod=SHA256)
+        h.update(request_hash)
+        self.mtp.set_transfer_key(h.digest())
+        print("Established session key:")
+        print(h.hexdigest())
+        
 

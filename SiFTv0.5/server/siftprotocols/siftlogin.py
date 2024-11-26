@@ -2,7 +2,7 @@
 
 import os
 import time
-from Crypto.Hash import SHA256
+from Crypto.Hash import SHA256, HMAC
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
@@ -67,6 +67,7 @@ class SiFT_LOGIN:
         login_res_fields = login_res.decode(self.coding).split(self.delimiter)
         login_res_struct = {}
         login_res_struct['request_hash'] = bytes.fromhex(login_res_fields[0])
+        login_res_struct['server_random'] = bytes.fromhex(login_res_fields[1])
         return login_res_struct
 
 
@@ -151,10 +152,16 @@ class SiFT_LOGIN:
             print('User ' + loginReq['username'] + ' logged in')
         # DEBUG 
         #Set derived key to HKDF key derivation...
-        derived_key = "NEED TO FIX THIS"
+        print("HMAC material")
+        client_random_bytes = bytes.fromhex(loginReq['client_random'])  # Decode from hex to bytes
+        hmac_material = client_random_bytes + login_res_struct['server_random']
+        print(hmac_material)
+        h = HMAC.new(hmac_material, digestmod=SHA256)
+        h.update(request_hash)
+        self.mtp.set_transfer_key(h.digest())
+        print("Established session key:")
+        print(h.hexdigest())
         
-        self.mtp.set_transfer_key(derived_key)
-
         return loginReq['username']
 
 
