@@ -24,6 +24,8 @@ class SiFT_MTP:
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
 		self.size_msg_hdr_len = 2
+		self.size_msg_hdr_sqn = 2
+		self.size_msg_hdr_rnd = 6
 		self.rsv = b'\x00\x00'
 		self.type_login_req =    b'\x00\x00'
 		self.type_login_res =    b'\x00\x10'
@@ -51,7 +53,9 @@ class SiFT_MTP:
 		parsed_msg_hdr, i = {}, 0
 		parsed_msg_hdr['ver'], i = msg_hdr[i:i+self.size_msg_hdr_ver], i+self.size_msg_hdr_ver 
 		parsed_msg_hdr['typ'], i = msg_hdr[i:i+self.size_msg_hdr_typ], i+self.size_msg_hdr_typ
-		parsed_msg_hdr['len'] = msg_hdr[i:i+self.size_msg_hdr_len]
+		parsed_msg_hdr['len'], i = msg_hdr[i:i+self.size_msg_hdr_len], i+self.size_msg_hdr_len
+		parsed_msg_hdr['sqn'], i= msg_hdr[i:i+self.size_msg_hdr_sqn], i+self.size_msg_hdr_sqn
+		parsed_msg_hdr['rnd'] = msg_hdr[i:]
 		return parsed_msg_hdr
 
 	# receives n bytes from the peer socket
@@ -111,6 +115,8 @@ class SiFT_MTP:
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body reveived')
 
+		nonce = msg_hdr[6:14]
+
 		if (parsed_msg_hdr['typ'] == self.type_login_req) :
 			try:
 				msg_enc_tk = msg_body[-256:]
@@ -120,7 +126,6 @@ class SiFT_MTP:
 				raise SiFT_MTP_Error('Unable to break down message body --> ' + e.err_msg)
 
 			tk = rsa_generation.decrypt(msg_enc_tk)
-			nonce = msg_hdr[6:14]
 			#DEBUG 
 			print("Recieved TK: " + str(tk))
 			print("Recieved Nonce: " + str(nonce))
@@ -134,6 +139,24 @@ class SiFT_MTP:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 
 			self.transfer_key = tk
+		else:
+			try:
+				msg_mac = msg_body[-12:]
+				msg_enc_payload = msg_body[:-12]
+			except SiFT_MTP_Error as e:
+				raise SiFT_MTP_Error('Unable to break down login response body --> ' + e.err_msg)
+			print(nonce)
+			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msg_hdr)
+			try:
+				print("Recieved msg mac:")
+				print(msg_mac)
+				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
+				#DEBUG
+				print("The message is authentic:", decryptedPayload)
+				#DEBUG
+			except:
+				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 
 		return parsed_msg_hdr['typ'], decryptedPayload
 

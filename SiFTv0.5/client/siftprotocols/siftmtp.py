@@ -24,6 +24,8 @@ class SiFT_MTP:
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
 		self.size_msg_hdr_len = 2
+		self.size_msg_hdr_sqn = 2
+		self.size_msg_hdr_rnd = 6
 		self.rsv = b'\x00\x00'
 		self.type_login_req =    b'\x00\x00'
 		self.type_login_res =    b'\x00\x10'
@@ -51,7 +53,9 @@ class SiFT_MTP:
 		parsed_msg_hdr, i = {}, 0
 		parsed_msg_hdr['ver'], i = msg_hdr[i:i+self.size_msg_hdr_ver], i+self.size_msg_hdr_ver 
 		parsed_msg_hdr['typ'], i = msg_hdr[i:i+self.size_msg_hdr_typ], i+self.size_msg_hdr_typ
-		parsed_msg_hdr['len'] = msg_hdr[i:i+self.size_msg_hdr_len]
+		parsed_msg_hdr['len'], i = msg_hdr[i:i+self.size_msg_hdr_len], i+self.size_msg_hdr_len
+		parsed_msg_hdr['sqn'], i= msg_hdr[i:i+self.size_msg_hdr_sqn], i+self.size_msg_hdr_sqn
+		parsed_msg_hdr['rnd'] = msg_hdr[i:]
 		return parsed_msg_hdr
 
 
@@ -110,13 +114,16 @@ class SiFT_MTP:
 		if len(msg_body) != msg_len - self.size_msg_hdr: 
 			raise SiFT_MTP_Error('Incomplete message body reveived')
 
+		try:
+			msg_mac = msg_body[-12:]
+			msg_enc_payload = msg_body[:-12]
+		except SiFT_MTP_Error as e:
+			raise SiFT_MTP_Error('Unable to break down login response body --> ' + e.err_msg)
+
+		nonce = msg_hdr[6:14]
+
 		if (parsed_msg_hdr['typ'] == self.type_login_res) :
-			try:
-				msg_mac = msg_body[-12:]
-				msg_enc_payload = msg_body[:-12]
-			except SiFT_MTP_Error as e:
-				raise SiFT_MTP_Error('Unable to break down login response body --> ' + e.err_msg)
-			nonce = msg_hdr[6:14]
+			
 			#DEBUG 
 			print("Decryption key: " + str(self.transfer_key))
 			print("Recieved Nonce: " + str(nonce))
@@ -128,9 +135,17 @@ class SiFT_MTP:
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
 			except e:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
-
+		else :
+			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msg_hdr)
+			try:
+				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
+				#DEBUG
+				print("The message is authentic:", decryptedPayload)
+				#DEBUG
+			except:
+				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 			
-
 		return parsed_msg_hdr['typ'], decryptedPayload
 
 
@@ -145,8 +160,6 @@ class SiFT_MTP:
 	# builds and sends message of a given type using the provided payload
 	def send_msg(self, msg_type, msg_payload):
 		
-
-  
 		if (msg_type == self.type_login_req) :
 			MSG_MAC_LEN = 12  
 			MSG_ENC_TK_LEN = 256
@@ -197,7 +210,43 @@ class SiFT_MTP:
 				self.send_bytes(completeMessage)
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
-	
+		else:
+			MSG_MAC_LEN = 12  
+			rnd = os.urandom(6)
+			msg_len = self.size_msg_hdr + len(msg_payload) + MSG_MAC_LEN
+			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
+			#Build header
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+			#DEBUG
+			if self.DEBUG:
+				print("Header: ")
+				print(msgHeader.hex())
+				print("Unencrypted message: ")
+				print(msg_payload)
+			#DEBUG
+			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
+			cipher.update(msgHeader)
+			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
+			completeMessage = msgHeader + encrytptedPayload + tag
+			
+			#DEBUG
+			if self.DEBUG:
+				complete_msg_size = len(completeMessage)
+				print('MTP login message to send (' + str(complete_msg_size) + '):')
+				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
+				print('MSG (' + str(len(completeMessage)) + '): ')
+				print(completeMessage.hex())
+				print('------------------------------------------')
+			#DEBUG
+
+			try:
+				self.send_bytes(completeMessage)
+			except SiFT_MTP_Error as e:
+				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
+  
+		
+
 			
 
 		
