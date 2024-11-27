@@ -14,7 +14,7 @@ class SiFT_MTP:
 	def __init__(self, peer_socket):
 
 		self.DEBUG = True
-		self.sqn = 1
+		self.sqn = 0
 		self.transfer_key = ""
 		# --------- CONSTANTS ------------
 		self.version_major = 1
@@ -54,7 +54,7 @@ class SiFT_MTP:
 		parsed_msg_hdr['ver'], i = msg_hdr[i:i+self.size_msg_hdr_ver], i+self.size_msg_hdr_ver 
 		parsed_msg_hdr['typ'], i = msg_hdr[i:i+self.size_msg_hdr_typ], i+self.size_msg_hdr_typ
 		parsed_msg_hdr['len'], i = msg_hdr[i:i+self.size_msg_hdr_len], i+self.size_msg_hdr_len
-		parsed_msg_hdr['sqn'], i= msg_hdr[i:i+self.size_msg_hdr_sqn], i+self.size_msg_hdr_sqn
+		parsed_msg_hdr['sqn'], i= int.from_bytes(msg_hdr[i:i+self.size_msg_hdr_sqn], byteorder='big'), i+self.size_msg_hdr_sqn
 		parsed_msg_hdr['rnd'] = msg_hdr[i:]
 		return parsed_msg_hdr
 
@@ -86,6 +86,7 @@ class SiFT_MTP:
 			raise SiFT_MTP_Error('Incomplete message header received')
 		
 		parsed_msg_hdr = self.parse_msg_header(msg_hdr)
+		recieve_sqn = parsed_msg_hdr['sqn']
 
 		if parsed_msg_hdr['ver'] != self.msg_hdr_ver:
 			raise SiFT_MTP_Error('Unsupported version found in message header')
@@ -137,9 +138,13 @@ class SiFT_MTP:
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
 			except e:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
-
+			self.sqn = recieve_sqn + 1
 			self.transfer_key = tk
 		else:
+			if (recieve_sqn < self.sqn or recieve_sqn > self.sqn + 10):
+				raise SiFT_MTP_Error('Sequence number is outside of accepted window')
+			else:
+				self.sqn += 1
 			try:
 				msg_mac = msg_body[-12:]
 				msg_enc_payload = msg_body[:-12]
@@ -255,7 +260,7 @@ class SiFT_MTP:
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
   
-		
+		self.sqn += 1
 
   
 	
