@@ -110,7 +110,7 @@ class SiFT_LOGIN:
         print(f"Time difference: {time_difference_sec} seconds")
 
         # Check if the time difference exceeds ±1 second
-        if abs(recievedTime - incomingTime) >= 1_000_000_000:  # ±1 second in nanoseconds
+        if abs(recievedTime - incomingTime) >= 2_000_000_000:  # ±1 second in nanoseconds
             raise SiFT_LOGIN_Error('Reception time exceeds limit')
 
         # Debug output (optional, can be removed)

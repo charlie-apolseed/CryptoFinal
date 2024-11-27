@@ -54,7 +54,7 @@ class SiFT_MTP:
 		parsed_msg_hdr['ver'], i = msg_hdr[i:i+self.size_msg_hdr_ver], i+self.size_msg_hdr_ver 
 		parsed_msg_hdr['typ'], i = msg_hdr[i:i+self.size_msg_hdr_typ], i+self.size_msg_hdr_typ
 		parsed_msg_hdr['len'], i = msg_hdr[i:i+self.size_msg_hdr_len], i+self.size_msg_hdr_len
-		parsed_msg_hdr['sqn'], i= msg_hdr[i:i+self.size_msg_hdr_sqn], i+self.size_msg_hdr_sqn
+		parsed_msg_hdr['sqn'], i = int.from_bytes(msg_hdr[i:i+self.size_msg_hdr_sqn], byteorder='big'), i+self.size_msg_hdr_sqn
 		parsed_msg_hdr['rnd'] = msg_hdr[i:]
 		return parsed_msg_hdr
 
@@ -88,7 +88,14 @@ class SiFT_MTP:
 			raise SiFT_MTP_Error('Incomplete message header received')
 		
 		parsed_msg_hdr = self.parse_msg_header(msg_hdr)
-
+		recieve_sqn = parsed_msg_hdr['sqn']
+		print(recieve_sqn)
+		print("Client: " + str(self.sqn))
+		if (recieve_sqn < self.sqn or recieve_sqn > self.sqn + 10):
+			raise SiFT_MTP_Error('Sequence number is outside of accepted window')
+		else:
+			self.sqn += 1
+   
 		if parsed_msg_hdr['ver'] != self.msg_hdr_ver:
 			raise SiFT_MTP_Error('Unsupported version found in message header')
 
@@ -244,8 +251,8 @@ class SiFT_MTP:
 				self.send_bytes(completeMessage)
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
-  
-		
+		self.sqn += 1
+
 
 			
 
