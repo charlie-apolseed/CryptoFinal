@@ -4,7 +4,7 @@ import os
 import time
 from Crypto.Hash import SHA256, HMAC
 from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Protocol.KDF import PBKDF2, HKDF
 from siftprotocols.siftmtp import SiFT_MTP, SiFT_MTP_Error
 
 
@@ -57,8 +57,6 @@ class SiFT_LOGIN:
     def build_login_res(self, login_res_struct):
 
         login_res_str = login_res_struct['request_hash'].hex() 
-        login_res_str += "\n"
-        login_res_str += login_res_struct['server_random'].hex()
         return login_res_str.encode(self.coding)
 
 
@@ -101,29 +99,16 @@ class SiFT_LOGIN:
         if msg_type != self.mtp.type_login_req:
             raise SiFT_LOGIN_Error('Login request expected, but received something else')
 
-        loginReq = self.parse_login_req(msg_payload)
-        incomingTime = int(loginReq.get("timestamp"))  # Incoming time in nanoseconds
-        recievedTime = time.time_ns()  # Current time in nanoseconds
-
-        # Compute time difference in seconds for debugging
-        time_difference_sec = (recievedTime - incomingTime) / 1_000_000_000
-        print(f"Time difference: {time_difference_sec} seconds")
-
-        # Check if the time difference exceeds ±1 second
-        if abs(recievedTime - incomingTime) >= 2_000_000_000:  # ±1 second in nanoseconds
-            raise SiFT_LOGIN_Error('Reception time exceeds limit')
-
-        # Debug output (optional, can be removed)
-        print(f"Time difference (debug): {time_difference_sec} seconds")
-
-        # Compute hash
+        # processing login request
         hash_fn = SHA256.new()
         hash_fn.update(msg_payload)
         request_hash = hash_fn.digest()
 
+        login_req_struct = self.parse_login_req(msg_payload)
+
         # checking username and password
-        if loginReq['username'] in self.server_users:
-            if not self.check_password(loginReq['password'], self.server_users[loginReq['username']]):
+        if login_req_struct['username'] in self.server_users:
+            if not self.check_password(login_req_struct['password'], self.server_users[login_req_struct['username']]):
                 raise SiFT_LOGIN_Error('Password verification failed')
         else:
             raise SiFT_LOGIN_Error('Unkown user attempted to log in')
@@ -131,7 +116,6 @@ class SiFT_LOGIN:
         # building login response
         login_res_struct = {}
         login_res_struct['request_hash'] = request_hash
-        login_res_struct['server_random'] = os.urandom(16)  
         msg_payload = self.build_login_res(login_res_struct)
 
         # DEBUG 
@@ -149,20 +133,10 @@ class SiFT_LOGIN:
 
         # DEBUG 
         if self.DEBUG:
-            print('User ' + loginReq['username'] + ' logged in')
+            print('User ' + login_req_struct['username'] + ' logged in')
         # DEBUG 
-        #Set derived key to HKDF key derivation...
-        print("HMAC material")
-        client_random_bytes = bytes.fromhex(loginReq['client_random'])  # Decode from hex to bytes
-        hmac_material = client_random_bytes + login_res_struct['server_random']
-        print(hmac_material)
-        h = HMAC.new(hmac_material, digestmod=SHA256)
-        h.update(request_hash)
-        self.mtp.set_transfer_key(h.digest())
-        print("Established session key:")
-        print(h.hexdigest())
-        
-        return loginReq['username']
+
+        return login_req_struct['username']
 
 
     # handles login process (to be used by the client)
@@ -186,6 +160,7 @@ class SiFT_LOGIN:
         # trying to send login request
         try:
             self.mtp.send_msg(self.mtp.type_login_req, msg_payload)
+            print("Client login message sent")
         except SiFT_MTP_Error as e:
             raise SiFT_LOGIN_Error('Unable to send login request --> ' + e.err_msg)
 
@@ -193,7 +168,7 @@ class SiFT_LOGIN:
         hash_fn = SHA256.new()
         hash_fn.update(msg_payload)
         request_hash = hash_fn.digest()
-
+  
         # trying to receive a login response
         try:
             msg_type, msg_payload = self.mtp.receive_msg()
@@ -216,4 +191,14 @@ class SiFT_LOGIN:
         # checking request_hash receiveid in the login response
         if login_res_struct['request_hash'] != request_hash:
             raise SiFT_LOGIN_Error('Verification of login response failed')
+        
+        #Generating session key
+        transfer_key = HKDF(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'], key_len=32, salt=request_hash,  hashmod=SHA256, num_keys=1)
+        if self.DEBUG:
+            print("Transfer key material: ")
+            print(bytes.fromhex(login_req_struct['client_random']) + login_res_struct['server_random'])
+            print("Transfer key: ")
+            print(transfer_key)
+        self.mtp.set_transfer_key(transfer_key)
+
 

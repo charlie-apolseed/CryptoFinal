@@ -47,16 +47,14 @@ def newline(s):
 
 # Key Generation
 def generate_keypair():
-    print('Generating a new 2048-bit RSA key pair...')
     keypair = RSA.generate(2048)
     pubkey = keypair.publickey()
     save_publickey(pubkey, pubkeyfile)
     save_keypair(keypair, privkeyfile)
-    print('Done.')
+
 
 # Encryption
 def encrypt(inputText):
-    print('Encrypting...')
     pubkey = load_publickey(pubkeyfile)
     RSAcipher = PKCS1_OAEP.new(pubkey)
 
@@ -66,41 +64,7 @@ def encrypt(inputText):
 
 # Decryption
 def decrypt(ciphertext):
-    print('Decrypting...')
-
-    # with open(inputfile, 'rb') as f:
-    #     sep = f.readline()
-    #     while sep:
-    #         data = f.readline().strip()
-    #         sep = sep.strip()
-    #         if sep == b'--- ENCRYPTED AES KEY ---':
-    #             encsymkey = b64decode(data)
-    #         elif sep == b'--- IV FOR CBC MODE ---':
-    #             iv = b64decode(data)
-    #         elif sep == b'--- CIPHERTEXT ---':
-    #             ciphertext = b64decode(data)
-    #         elif sep == b'--- SIGNATURE ---':
-    #             signature = b64decode(data)
-    #             sign = True
-    #         sep = f.readline()
-
-    # if not (encsymkey and iv and ciphertext):
-    #     print('Error: Could not parse content of input file.')
-    #     sys.exit(1)
-
-    # if sign:
-    #     pubkey = load_publickey(pubkeyfile)
-    #     verifier = PKCS1_PSS.new(pubkey)
-    #     hashfn = SHA256.new()
-    #     hashfn.update(encsymkey + iv + ciphertext)
-    #     if not verifier.verify(hashfn, signature):
-    #         print('Signature verification failed.')
-    #         return
-
     privkey = load_keypair(privkeyfile)
     RSAcipher = PKCS1_OAEP.new(privkey)
     plaintext = RSAcipher.decrypt(ciphertext)
-   
-    
-    print('Done.')
     return plaintext
