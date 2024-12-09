@@ -14,12 +14,13 @@ class SiFT_MTP:
 	def __init__(self, peer_socket):
 
 		self.DEBUG = True
-		self.sqn = 1
+		self.snd_sqn = 1
+		self.rec_sqn = 0
 		self.transfer_key = ""
 		# --------- CONSTANTS ------------
 		self.version_major = 1
 		self.version_minor = 0
-		self.msg_hdr_ver = b'\x10\x00'
+		self.msg_hdr_ver = b'\x01\x00'
 		self.size_msg_hdr = 16
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
@@ -73,7 +74,6 @@ class SiFT_MTP:
 				raise SiFT_MTP_Error('Connection with peer is broken')
 			bytes_received += chunk
 			bytes_count += len(chunk)
-		print("Client- Bytes recieved: "+ str(bytes_count))
 		return bytes_received
 
 
@@ -89,12 +89,6 @@ class SiFT_MTP:
 		
 		parsed_msg_hdr = self.parse_msg_header(msg_hdr)
 		recieve_sqn = parsed_msg_hdr['sqn']
-		print(recieve_sqn)
-		print("Client: " + str(self.sqn))
-		if (recieve_sqn < self.sqn or recieve_sqn > self.sqn + 10):
-			raise SiFT_MTP_Error('Sequence number is outside of accepted window')
-		else:
-			self.sqn += 1
    
 		if parsed_msg_hdr['ver'] != self.msg_hdr_ver:
 			raise SiFT_MTP_Error('Unsupported version found in message header')
@@ -130,26 +124,23 @@ class SiFT_MTP:
 		nonce = msg_hdr[6:14]
 
 		if (parsed_msg_hdr['typ'] == self.type_login_res) :
-			
-			#DEBUG 
-			print("Decryption key: " + str(self.transfer_key))
-			print("Recieved Nonce: " + str(nonce))
-			#DEBUG 
-			
+			self.rec_sqn = recieve_sqn
 			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msg_hdr)
+			
 			try:
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
 			except e:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 		else :
+			if (recieve_sqn < self.rec_sqn or recieve_sqn > self.rec_sqn + 10):
+				raise SiFT_MTP_Error('Sequence number is outside of accepted window')
+			else:
+				self.rec_sqn = recieve_sqn
 			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msg_hdr)
 			try:
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
-				#DEBUG
-				print("The message is authentic:", decryptedPayload)
-				#DEBUG
 			except:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 			
@@ -177,7 +168,7 @@ class SiFT_MTP:
 			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
    
 			#Construct the header
-			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.snd_sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
 			#DEBUG
 			if self.DEBUG:
 				print("Header: ")
@@ -190,14 +181,14 @@ class SiFT_MTP:
 			#Encrypt the payload in AES-GCM
 			tk = os.urandom(32) 	
 			self.transfer_key = tk
-			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			nonce = self.snd_sqn.to_bytes(2, byteorder='big') + rnd
 			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
 			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
 
 			#Encrypt the tk in RSA 
-			rsa_generation.generate_keypair()
-			encryptedTK = rsa_generation.encrypt(tk)
+			# REPLACE THE SECOND ARGUMENT WITH THE FILE PATH TO THE PUBLIC KEY
+			encryptedTK = rsa_generation.encrypt(tk, './siftprotocols/pubkeytest.pem')
 			completeMessage = msgHeader + encrytptedPayload + tag + encryptedTK
 
 
@@ -223,15 +214,9 @@ class SiFT_MTP:
 			msg_len = self.size_msg_hdr + len(msg_payload) + MSG_MAC_LEN
 			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
 			#Build header
-			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
-			#DEBUG
-			if self.DEBUG:
-				print("Header: ")
-				print(msgHeader.hex())
-				print("Unencrypted message: ")
-				print(msg_payload)
-			#DEBUG
-			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.snd_sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+   
+			nonce = self.snd_sqn.to_bytes(2, byteorder='big') + rnd
 			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
 			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
@@ -240,7 +225,7 @@ class SiFT_MTP:
 			#DEBUG
 			if self.DEBUG:
 				complete_msg_size = len(completeMessage)
-				print('MTP login message to send (' + str(complete_msg_size) + '):')
+				print('MTP message to send (' + str(complete_msg_size) + '):')
 				print('HDR (' + str(len(msgHeader)) + '): ' + msgHeader.hex())
 				print('MSG (' + str(len(completeMessage)) + '): ')
 				print(completeMessage.hex())
@@ -251,7 +236,7 @@ class SiFT_MTP:
 				self.send_bytes(completeMessage)
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
-		self.sqn += 1
+		self.snd_sqn += 1
 
 
 			

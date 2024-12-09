@@ -47,26 +47,22 @@ def newline(s):
 
 # Key Generation
 def generate_keypair():
-    print('Generating a new 2048-bit RSA key pair...')
     keypair = RSA.generate(2048)
     pubkey = keypair.publickey()
     save_publickey(pubkey, pubkeyfile)
     save_keypair(keypair, privkeyfile)
-    print('Done.')
+   
 
 # Encryption
-def encrypt(inputText):
-    print('Encrypting...')
+def encrypt(inputText, pubkeyfile):
     pubkey = load_publickey(pubkeyfile)
     RSAcipher = PKCS1_OAEP.new(pubkey)
-
     encryptedData = RSAcipher.encrypt(inputText)
     
     return encryptedData
 
 # Decryption
 def decrypt(inputfile, outputfile):
-    print('Decrypting...')
     encsymkey, iv, ciphertext, signature = b'', b'', b'', None
 
     with open(inputfile, 'rb') as f:
@@ -107,4 +103,3 @@ def decrypt(inputfile, outputfile):
 
     with open(outputfile, 'wb') as f:
         f.write(plaintext)
-    print('Done.')

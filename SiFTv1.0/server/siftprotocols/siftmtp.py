@@ -14,12 +14,13 @@ class SiFT_MTP:
 	def __init__(self, peer_socket):
 
 		self.DEBUG = True
-		self.sqn = 0
+		self.snd_sqn = 1
+		self.rec_sqn = 0
 		self.transfer_key = ""
 		# --------- CONSTANTS ------------
 		self.version_major = 1
 		self.version_minor = 0
-		self.msg_hdr_ver = b'\x10\x00'
+		self.msg_hdr_ver = b'\x01\x00'
 		self.size_msg_hdr = 16
 		self.size_msg_hdr_ver = 2
 		self.size_msg_hdr_typ = 2
@@ -127,10 +128,6 @@ class SiFT_MTP:
 				raise SiFT_MTP_Error('Unable to break down message body --> ' + e.err_msg)
 
 			tk = rsa_generation.decrypt(msg_enc_tk)
-			#DEBUG 
-			print("Recieved TK: " + str(tk))
-			print("Recieved Nonce: " + str(nonce))
-			#DEBUG 
 			
 			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msg_hdr)
@@ -138,13 +135,13 @@ class SiFT_MTP:
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
 			except e:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
-			self.sqn = recieve_sqn + 1
+			self.rec_sqn = recieve_sqn
 			self.transfer_key = tk
 		else:
-			if (recieve_sqn < self.sqn or recieve_sqn > self.sqn + 10):
+			if (recieve_sqn < self.rec_sqn or recieve_sqn > self.rec_sqn + 10):
 				raise SiFT_MTP_Error('Sequence number is outside of accepted window')
 			else:
-				self.sqn += 1
+				self.rec_sqn = recieve_sqn
 			try:
 				msg_mac = msg_body[-12:]
 				msg_enc_payload = msg_body[:-12]
@@ -154,12 +151,7 @@ class SiFT_MTP:
 			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msg_hdr)
 			try:
-				print("Recieved msg mac:")
-				print(msg_mac)
 				decryptedPayload = cipher.decrypt_and_verify(msg_enc_payload, msg_mac) 
-				#DEBUG
-				print("The message is authentic:", decryptedPayload)
-				#DEBUG
 			except:
 				raise SiFT_MTP_Error('MAC value does not match recieved message --> ' + e.err_msg)
 
@@ -189,19 +181,10 @@ class SiFT_MTP:
 			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
    
 			#Construct the header
-			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
-			#DEBUG
-			if self.DEBUG:
-				print("Header: ")
-				print(msgHeader.hex())
-				print("Unencrypted message: ")
-				print(msg_payload)
-			
-			#DEBUG
-
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.snd_sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
 			#Encrypt the payload in AES-GCM
 			tk = os.urandom(32) 	
-			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			nonce = self.snd_sqn.to_bytes(2, byteorder='big') + rnd
 			cipher = AES.new(tk, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
 			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
@@ -231,15 +214,9 @@ class SiFT_MTP:
 			msg_len = self.size_msg_hdr + len(msg_payload) + MSG_MAC_LEN
 			msg_len_hex = msg_len.to_bytes(2, byteorder='big')
 			#Build header
-			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
-			#DEBUG
-			if self.DEBUG:
-				print("Header: ")
-				print(msgHeader.hex())
-				print("Unencrypted message: ")
-				print(msg_payload)
-			#DEBUG
-			nonce = self.sqn.to_bytes(2, byteorder='big') + rnd
+			msgHeader = self.msg_hdr_ver + msg_type + msg_len_hex + self.snd_sqn.to_bytes(2, byteorder='big') + rnd + self.rsv
+			
+			nonce = self.snd_sqn.to_bytes(2, byteorder='big') + rnd
 			cipher = AES.new(self.transfer_key, AES.MODE_GCM, nonce, mac_len=12)
 			cipher.update(msgHeader)
 			encrytptedPayload, tag = cipher.encrypt_and_digest(msg_payload) 
@@ -260,7 +237,7 @@ class SiFT_MTP:
 			except SiFT_MTP_Error as e:
 				raise SiFT_MTP_Error('Unable to send message to peer --> ' + e.err_msg)
   
-		self.sqn += 1
+		self.snd_sqn += 1
 
   
 	
